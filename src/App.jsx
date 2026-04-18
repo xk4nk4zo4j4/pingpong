@@ -4,13 +4,13 @@ import { useState, useMemo, useCallback } from "react";
    成員名單（隱藏積分，外部不顯示）
    ═══════════════════════════════════════════════════════════ */
 const ROSTER = [
-  { id: "alan", name: "Alan", _v: 8.5, active: true },
-  { id: "jimmy", name: "Jimmy", _v: 8.5, active: true },
-  { id: "curly", name: "捲毛", _v: 8.0, active: true },
-  { id: "peiyun", name: "珮芸", _v: 7.5, active: true },
-  { id: "siu", name: "修哥", _v: 7.0, active: true },
-  { id: "wenzhu", name: "雯筑", _v: 5.0, active: true },
-  { id: "yinxuan", name: "音旋", _v: 3.0, active: true },
+  { id: "alan", name: "Alan", active: true },
+  { id: "jimmy", name: "Jimmy", active: true },
+  { id: "curly", name: "捲毛", active: true },
+  { id: "peiyun", name: "珮芸", active: true },
+  { id: "siu", name: "修哥", active: true },
+  { id: "wenzhu", name: "雯筑", active: true },
+  { id: "yinxuan", name: "音旋", active: true },
 ];
 
 /* ── 場次預設表 ───────────────────────────────────────────── */
@@ -67,33 +67,7 @@ const SCHEDULE = {
 
 /* ── 從場次表生成對戰 ────────────────────────────────────── */
 
-function calcDynaDelta(rounds) {
-  const delta = {};
-  for (const rd of rounds) {
-    for (const t of (rd.tables || [])) {
-      if (t.isSingles || t.isSingle1v1) continue;
-      const gs = rd.gs?.[t.tableNo];
-      if (!gs) continue;
-      const games = gs.finalGames || gs.games || [];
-      for (const g of games) {
-        if (!g.winner || (g.scoreA === 0 && g.scoreB === 0)) continue;
-        const total = g.scoreA + g.scoreB;
-        const diff = Math.abs(g.scoreA - g.scoreB);
-        const ratio = Math.min(diff / Math.max(total * 0.5, 1), 1);
-        const adj = 0.4 * (0.6 * ratio + 0.4);
-        const W = g.winner === "A" ? t.teamA : t.teamB;
-        const L = g.winner === "A" ? t.teamB : t.teamA;
-        W.forEach(p => { delta[p.id] = (delta[p.id] || 0) + adj; });
-        L.forEach(p => { delta[p.id] = (delta[p.id] || 0) - adj; });
-      }
-    }
-  }
-  return delta;
-}
 
-function applyDelta(players, delta) {
-  return players.map(p => ({ ...p, _v: Math.max(0, Math.min(12, p._v + (delta[p.id] || 0))) }));
-}
 
 function hasValidScore(gs) {
   if (!gs) return false;
@@ -103,12 +77,11 @@ function hasValidScore(gs) {
 }
 
 /* ── 從場次表生成對戰 ────────────────────────────────────── */
-// players 已按 _v 排序後洗牌（確保最弱兩人不同組）
-function shuffleWithConstraint(players) {
-  const sorted = [...players].sort((a, b) => a._v - b._v);
-  const arr = [...sorted];
-  for (let i = arr.length - 1; i > 1; i--) {
-    const j = 1 + Math.floor(Math.random() * (i));
+// 洗牌
+function shuffle(players) {
+  const arr = [...players];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
@@ -472,14 +445,12 @@ export default function App() {
   // 4人模式：選人狀態
   const [sel4, setSel4] = useState([]);
 
-  const addGuest = () => { const name = guestInput.trim(); if (!name) return; setGuests(g => [...g, { id: `g_${Date.now()}`, name, _v: 5.0, active: true }]); setGI(""); };
+  const addGuest = () => { const name = guestInput.trim(); if (!name) return; setGuests(g => [...g, { id: `g_${Date.now()}`, name, active: true }]); setGI(""); };
   const removeGuest = (id) => setGuests(g => g.filter(x => x.id !== id));
 
   const activePlayers = useMemo(() => {
-    const base = [...members.filter(m => m.active), ...guests];
-    const delta = calcDynaDelta(rounds);
-    return applyDelta(base, delta);
-  }, [members, guests, rounds]);
+    return [...members.filter(m => m.active), ...guests];
+  }, [members, guests]);
 
   const n = activePlayers.length;
 
@@ -528,7 +499,7 @@ export default function App() {
         setPage("match"); return;
       } else {
         // 4人雙打：走 schedule
-        const shuffled = shuffleWithConstraint(activePlayers);
+        const shuffled = shuffle(activePlayers);
         setMapped(shuffled);
         const entry = SCHEDULE[4][0];
         const tables = makeTablesFromEntry(entry, shuffled);
@@ -541,7 +512,7 @@ export default function App() {
 
     // 5人單打模式
     if (n === 5 && mode5 === "singles") {
-      const shuffled = shuffleWithConstraint(activePlayers);
+      const shuffled = shuffle(activePlayers);
       setMapped(shuffled);
       const entry = SCHEDULE[5][0];
       const waiting = shuffled[entry.rest[0]];
@@ -556,7 +527,7 @@ export default function App() {
     }
 
     // 5人雙打 + 6/7/8人
-    const shuffled = shuffleWithConstraint(activePlayers);
+    const shuffled = shuffle(activePlayers);
     setMapped(shuffled);
     const key = Math.min(n, 8);
     const schedule = SCHEDULE[key];
@@ -585,7 +556,7 @@ export default function App() {
     // 超過場次上限 → reshuffle，重新洗牌
     let currentMapped = mapped;
     if (schedIdx >= schedule.length) {
-      currentMapped = shuffleWithConstraint(activePlayers);
+      currentMapped = shuffle(activePlayers);
       setMapped(currentMapped);
       setSchedIdx(0);
       setOverLimit(true);
